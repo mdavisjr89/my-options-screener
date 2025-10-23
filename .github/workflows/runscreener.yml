@@ -27,6 +27,10 @@ jobs:
         with:
           python-version: 3.9
 
+      # --- NEW STEP: Manually fix DNS resolution ---
+      - name: Fix DNS by updating hosts file
+        run: echo "23.35.150.150 api.tdameritrade.com" | sudo tee -a /etc/hosts
+
       # 3. Install system dependencies for pycurl
       - name: Install libcurl dependencies
         run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev
