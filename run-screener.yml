@@ -1,0 +1,44 @@
+# This is the GitHub Actions workflow file.
+# It defines when and how to run your Python screener.
+
+name: Run Daily Options Screener
+
+on:
+  # This allows you to run the workflow manually from the Actions tab
+  workflow_dispatch:
+
+  # This sets the schedule
+  schedule:
+    # Runs at 21:05 UTC (5:05 PM ET / 4:05 PM CT) every day from Monday to Friday.
+    - cron: '5 21 * * 1-5'
+
+jobs:
+  run-screener:
+    runs-on: ubuntu-latest # Use a standard, clean Linux environment
+
+    steps:
+      # 1. Checks out your repository's code so the script can be run
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      # 2. Sets up the Python environment
+      - name: Set up Python 3.9
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
+
+      # 3. Install system dependencies for pycurl
+      - name: Install libcurl dependencies
+        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+
+      # 4. Install the Python libraries from your requirements.txt file
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      # 5. Run the main Python script
+      - name: Run Options Screener
+        env:
+          # This securely passes your secrets to the script
+          TDA_API_KEY: ${{ secrets.TDA_API_KEY }}
+          PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
+        run: python main.py
