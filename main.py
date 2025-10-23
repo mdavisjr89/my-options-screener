@@ -12,15 +12,13 @@ import os
 # ==============================================================================
 # 1. API KEY CONFIGURATION
 # ==============================================================================
-# In Google Cloud Functions, you will set these as Environment Variables.
-TDA_API_KEY = os.environ.get('TDA_API_KEY', 'YOUR_TDA_KEY_HERE')
-PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY', 'YOUR_PUSHBULLET_KEY_HERE')
+TDA_API_KEY = os.environ.get('TDA_API_KEY')
+PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY')
 
 # ==============================================================================
 # 2. STOCK UNIVERSE MODULE
 # ==============================================================================
 def get_universe():
-    # Your full, 500+ ticker universe
     UNIVERSE = list(set([
         "SMCI", "TTD", "RKLB", "CRDO", "ALAB", "FTAI", "SATS", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "QCOM",
         "INTC", "CSCO", "CRM", "ADBE", "ORCL", "TXN", "SAP", "IBM", "UBER", "PYPL", "SQ", "MU", "ADI", "ASML", "LRCX", "AMAT", "KLAC", "SNPS",
@@ -78,12 +76,14 @@ def calculate_adx(high, low, close, length):
     return dx.ewm(alpha=1/length, adjust=False).mean()
 
 def generate_signals(tickers):
+    print("Generating signals...")
     signals = []
     qqq_hist = yfinance.Ticker("QQQ").history(period="1y")
     qqq_sma200 = qqq_hist['Close'].rolling(window=200).mean().iloc[-1]
     qqq_close = qqq_hist['Close'].iloc[-1]
     is_bull_regime = qqq_close > qqq_sma200
     is_bear_regime = qqq_close < qqq_sma200
+    print(f"Market Regime: {'BULL' if is_bull_regime else 'BEAR' if is_bear_regime else 'NEUTRAL'}")
 
     for ticker in tickers:
         if ticker == "QQQ": continue
@@ -106,10 +106,12 @@ def generate_signals(tickers):
 
             if is_bull_regime and is_crossover_long and last_daily['Close'] > last_weekly_tema and last_daily['ADX'] > 18.0:
                 signals.append({'ticker': ticker, 'signal': 'LONG', 'price': last_daily['Close'], 'adx': last_daily['ADX']})
+                print(f"  -> LONG Signal found for {ticker}")
             if is_bear_regime and is_crossover_short and last_daily['Close'] < last_weekly_tema and last_daily['ADX'] > 18.0:
                 signals.append({'ticker': ticker, 'signal': 'SHORT', 'price': last_daily['Close'], 'adx': last_daily['ADX']})
+                print(f"  -> SHORT Signal found for {ticker}")
         except Exception:
-            pass # Ignore tickers that fail to download
+            pass
     return signals
 
 # ==============================================================================
@@ -130,13 +132,21 @@ def find_best_contract(ticker, direction, tda_api_key):
         c.setopt(c.URL, url)
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
+        # --- FINAL FIX: Explicitly set the SSL/TLS version ---
+        c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_TLSv1_2)
         c.perform()
+        
         http_code = c.getinfo(pycurl.HTTP_CODE)
         c.close()
         
-        if http_code != 200: return None
+        if http_code != 200:
+            print(f"    - API call failed for {ticker} with HTTP status code: {http_code}")
+            return None
+        
         chain = json.loads(buffer.getvalue().decode('iso-8859-1'))
-        if chain.get('status') != 'SUCCESS' or not chain.get('callExpDateMap'): return None
+        if chain.get('status') != 'SUCCESS' or not chain.get('callExpDateMap'):
+            print(f"    - No options chain returned for {ticker}.")
+            return None
 
         all_contracts = []
         date_map = chain.get('callExpDateMap') if direction == 'LONG' else chain.get('putExpDateMap')
@@ -153,8 +163,10 @@ def find_best_contract(ticker, direction, tda_api_key):
 
         df['dte_target_diff'] = abs(df['daysToExpiration'] - 75)
         best_option = df.sort_values(by=['dte_target_diff', 'totalVolume'], ascending=[True, False]).iloc[0]
+        print(f"    -> Suitable Option Found for {ticker}.")
         return {"strike": best_option['strikePrice'], "expiration": best_option['expirationDate'], "dte": int(best_option['daysToExpiration']), "delta": best_option['delta'], "iv": best_option['volatility'], "oi": best_option['openInterest'], "volume": best_option['totalVolume']}
-    except Exception:
+    except Exception as e:
+        print(f"    - An error occurred while fetching options for {ticker}: {e}")
         return None
 
 def send_pushbullet(api_key, title, body):
@@ -162,24 +174,30 @@ def send_pushbullet(api_key, title, body):
         try:
             pb = Pushbullet(api_key)
             pb.push_note(title, body)
-        except Exception:
-            pass # Fail silently
+            print("\n--> Notification sent successfully!")
+        except Exception as e:
+            print(f"\n--> ERROR sending notification: {e}")
 
 # ==============================================================================
 # 5. MAIN ORCHESTRATION FUNCTION
 # ==============================================================================
 def run_screener_main(request):
-    """This is the main entry point for the Google Cloud Function."""
+    """This function was originally for Google Cloud, we adapt it for script execution."""
+    print(f"Scan started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     tickers = get_universe()
+    print(f"Loaded {len(tickers)} tickers for scanning.")
     initial_signals = generate_signals(tickers)
 
     if not initial_signals:
+        print("\nNo initial stock signals found today.")
         send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report", "No signals found today.")
-        return ('No signals found.', 200)
+        return
 
+    print(f"\nFound {len(initial_signals)} initial stock signals. Now filtering for suitable options...")
     notification_body = ""
     final_signal_count = 0
     for sig in initial_signals:
+        print(f"\n--- Analyzing Options for {sig['ticker']} ({sig['signal']}) ---")
         contract = find_best_contract(sig['ticker'], sig['signal'], TDA_API_KEY)
         if contract:
             final_signal_count += 1
@@ -192,13 +210,15 @@ def run_screener_main(request):
 
     if final_signal_count > 0:
         notification_title = f"Mike's Algo: {final_signal_count} Final Signal(s)"
+        print(f"\n✅ Scan Complete. {final_signal_count} final signals with suitable options found.")
         send_pushbullet(PUSHBULLET_API_KEY, notification_title, notification_body.strip())
-        return (f'{final_signal_count} signals found and sent.', 200)
     else:
+        print("\nNo signals met the options filtering criteria.")
         initial_body = f"{len(initial_signals)} initial signals found, but none had suitable options."
         send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report (No Options)", initial_body)
-        return ('No suitable options found.', 200)
 
-# This block allows you to test the script locally if you want
-# if __name__ == '__main__':
-        run_screener_main(None)
+# ==============================================================================
+# 6. SCRIPT EXECUTION BLOCK
+# ==============================================================================
+if __name__ == '__main__':
+    run_screener_main(None)
