@@ -41,4 +41,4 @@ jobs:
           # This securely passes your secrets to the script
           TDA_API_KEY: ${{ secrets.TDA_API_KEY }}
           PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
-        run: python main.py
+        run: python -u main.py
