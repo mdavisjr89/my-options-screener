@@ -201,4 +201,4 @@ def run_screener_main(request):
 
 # This block allows you to test the script locally if you want
 # if __name__ == '__main__':
-#     run_screener_main(None)
+        run_screener_main(None)
