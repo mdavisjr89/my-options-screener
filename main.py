@@ -16,42 +16,33 @@ TDA_API_KEY = os.environ.get('TDA_API_KEY')
 PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY')
 
 # ==============================================================================
-# 2. STOCK UNIVERSE MODULE
+# 2. SECTOR & UNIVERSE DATA
 # ==============================================================================
-def get_universe():
-    UNIVERSE = list(set([
-        "SMCI", "TTD", "RKLB", "CRDO", "ALAB", "FTAI", "SATS", "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "QCOM",
-        "INTC", "CSCO", "CRM", "ADBE", "ORCL", "TXN", "SAP", "IBM", "UBER", "PYPL", "SQ", "MU", "ADI", "ASML", "LRCX", "AMAT", "KLAC", "SNPS",
-        "CDNS", "PANW", "NOW", "SNOW", "ROP", "KEYS", "MSI", "HPQ", "DELL", "HPE", "NTAP", "STX", "WDC", "GLW", "TER", "FFIV", "CIEN", "EXTR",
-        "AKAM", "SWKS", "QRVO", "ON", "MCHP", "NXPI", "MRVL", "INFY", "WIT", "CTSH", "ACN", "GIB", "EPAM", "CDW", "TDY", "TRMB", "PTC", "TYL",
-        "ADSK", "ANSS", "V", "MA", "AXP", "FISV", "FIS", "GPN", "FLT", "SHOP", "ETSY", "CPNG", "CHWY", "DASH", "LYFT", "ZM", "DOCU", "TEAM",
-        "WDAY", "HUBS", "RNG", "SMAR", "BILL", "DOCN", "MDB", "PLTR", "U", "RBLX", "APP", "DDOG", "NET", "OKTA", "ZS", "CRWD", "FTNT", "CHKP",
-        "QLYS", "TENB", "VRNS", "CYBR", "S", "SYM", "GEN", "TSM", "ARM", "SOXL", "GFS", "UMC", "ASX", "ENTG", "MKSI", "FSLR", "BE", "PLUG",
-        "ENPH", "SEDG", "RUN", "NOVA", "ARRY", "MAXN", "AI", "SOUN", "UPST", "PATH", "IOT", "GTLB", "STEM", "BLDE", "IONQ", "RGTI", "QUBT", "DM",
-        "NNDM", "SMRT", "EVGO", "CHPT", "BLNK", "RIVN", "LCID", "PSNY", "ABNB", "COIN", "HOOD", "MQ", "AFRM", "SOFI", "NU", "OPRT", "LMND",
-        "ROOT", "BMBL", "MTCH", "DUOL", "CHGG", "COUR", "SKLZ", "PLTK", "TTWO", "EA", "ROKU", "FUBO", "SPOT", "PINS", "SNAP", "WIX", "UPWK",
-        "FVRR", "ASAN", "MNDY", "DOMO", "DT", "VRM", "CVNA", "MRNA", "BNTX", "NVAX", "REGN", "VRTX", "ALNY", "BIIB", "GILD", "AMGN", "EXEL",
-        "IONS", "CRSP", "EDIT", "NTLA", "BEAM", "FATE", "IOVA", "ARVN", "INCY", "JAZZ", "HALO", "MYGN", "PACB", "TWST", "ILMN", "ABBV", "LLY",
-        "MRK", "PFE", "BMY", "AZN", "NVS", "SNY", "GSK", "TAK", "ABT", "ISRG", "SYK", "MDT", "BDX", "ZBH", "BSX", "EW", "DHR", "TMO", "PODD",
-        "DXCM", "MASI", "RMD", "TFX", "HOLX", "XRAY", "COO", "ALGN", "AXNX", "GMED", "ICUI", "PEN", "NVCR", "TNDM", "TECH", "CTLT", "VEEV",
-        "IQV", "LH", "DGX", "IDXX", "WAT", "A", "CRL", "ZTS", "ELAN", "NTR", "MOS", "CF", "FMC", "CTVA", "XOM", "CVX", "COP", "EOG", "PSX",
-        "MPC", "HAL", "SLB", "VLO", "OXY", "DVN", "KMI", "WMB", "OKE", "TRP", "ENB", "ET", "FANG", "MRO", "APA", "BKR", "FTI", "HP", "NBR",
-        "RIG", "WHD", "PBF", "DK", "SU", "IMO", "CNQ", "CVE", "TRMLF", "LNG", "CTRA", "AR", "EQT", "RRC", "BTU", "METC", "CRK", "SM", "MTDR",
-        "VNOM", "CIVI", "TPL", "PTEN", "RES", "OIS", "WTTR", "TEN", "DRVN", "OII", "JNJ", "UNH", "CVS", "CI", "ELV", "HUM", "CNC", "MOH",
-        "HCA", "DVA", "UHS", "THC", "PG", "KO", "PEP", "WMT", "COST", "NKE", "HD", "LOW", "SBUX", "MCD", "CMG", "YUM", "QSR", "DRI", "TXRH",
-        "EAT", "CAKE", "PZZA", "DPZ", "WING", "TGT", "DG", "DLTR", "BBY", "TJX", "ROST", "ANF", "AEO", "URBN", "LULU", "ULTA", "EL", "CL",
-        "KMB", "CHD", "CLX", "HSY", "K", "GIS", "CPB", "MDLZ", "TSN", "HRL", "CAG", "MKC", "SJM", "BF-B", "STZ", "TAP", "SAM", "DEO", "BUD",
-        "CCEP", "MNST", "CELH", "KDP", "F", "GM", "RACE", "TM", "HMC", "STLA", "MAR", "HLT", "BKNG", "EXPE", "CCL", "RCL", "NCLH", "WYNN",
-        "LVS", "MGM", "CZR", "PENN", "DKNG", "DIS", "NFLX", "JPM", "BAC", "GS", "MS", "WFC", "BLK", "SCHW", "SPGI", "CME", "ICE", "NDAQ",
-        "MCO", "AJG", "AON", "MMC", "BRO", "WTW", "TRV", "PGR", "ALL", "CB", "HIG", "AIG", "MET", "PRU", "AFL", "AMP", "BEN", "TROW", "IVZ",
-        "NTRS", "STT", "BK", "USB", "PNC", "TFC", "FITB", "KEY", "HBAN", "RF", "CFG", "SYF", "COF", "ALLY", "SLM", "NAVI", "CACC", "OMF",
-        "CAT", "DE", "GE", "LMT", "HON", "UNP", "BA", "NOC", "EMR", "ETN", "RTX", "GD", "TDG", "WM", "RSG", "URI", "ITW", "PH", "CMI",
-        "PCAR", "FAST", "GWW", "MMM", "JCI", "XYL", "DOV", "AME", "SWK", "SNA", "IR", "TT", "IEX", "AOS", "FBIN", "MAS", "BLD", "DAL",
-        "UAL", "AAL", "LUV", "ALK", "FDX", "UPS", "CHRW", "EXPD", "ODFL", "XPO", "JBHT", "KNX", "SNDR", "LIN", "APD", "NEM", "DOW", "ECL",
-        "SHW", "PPG", "FCX", "SCCO", "GOLD", "FNV", "WPM", "AEM", "IFF", "DD", "LYB", "ALB", "SQM", "CE", "EMN", "OLN", "WLK", "AXTA",
-        "CC", "AVTR", "STLD", "NUE", "CLF", "QQQ"
-    ]))
-    return UNIVERSE
+# NEW: A dictionary to map tickers to their sectors for organized reporting.
+SECTOR_MAP = {
+    "CORE TECH": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "QCOM", "INTC", "CSCO", "CRM", "ADBE", "ORCL", "TXN", "SAP", "IBM", "UBER", "PYPL", "SQ", "MU", "ADI", "ASML", "LRCX", "AMAT", "KLAC", "SNPS", "CDNS", "PANW", "NOW", "SNOW", "ROP", "KEYS", "MSI", "HPQ", "DELL", "HPE", "NTAP", "STX", "WDC", "GLW", "TER", "FFIV", "CIEN", "EXTR", "AKAM", "SWKS", "QRVO", "ON", "MCHP", "NXPI", "MRVL", "INFY", "WIT", "CTSH", "ACN", "GIB", "EPAM", "CDW", "TDY", "TRMB", "PTC", "TYL", "ADSK", "ANSS", "V", "MA", "AXP", "FISV", "FIS", "GPN", "FLT", "SHOP", "ETSY", "CPNG", "CHWY", "DASH", "LYFT", "ZM", "DOCU", "TEAM", "WDAY", "HUBS", "RNG", "SMAR", "BILL", "DOCN", "MDB", "PLTR", "U", "RBLX", "APP", "DDOG", "NET", "OKTA", "ZS", "CRWD", "FTNT", "CHKP", "QLYS", "TENB", "VRNS", "CYBR", "S", "SYM", "GEN"],
+    "HIGH-POTENTIAL TECH": ["SMCI", "TTD", "RKLB", "CRDO", "ALAB", "FTAI", "SATS"],
+    "SEMICONDUCTORS": ["TSM", "ARM", "SOXL", "GFS", "UMC", "ASX", "ENTG", "MKSI"],
+    "RENEWABLE ENERGY": ["FSLR", "BE", "PLUG", "ENPH", "SEDG", "RUN", "NOVA", "ARRY", "MAXN"],
+    "EMERGING TECH": ["AI", "SOUN", "UPST", "PATH", "IOT", "GTLB", "STEM", "BLDE", "IONQ", "RGTI", "QUBT", "DM", "NNDM", "SMRT", "EVGO", "CHPT", "BLNK", "RIVN", "LCID", "PSNY", "ABNB", "COIN", "HOOD", "MQ", "AFRM", "SOFI", "NU", "OPRT", "LMND", "ROOT", "BMBL", "MTCH", "DUOL", "CHGG", "COUR", "SKLZ", "PLTK", "TTWO", "EA", "ROKU", "FUBO", "SPOT", "PINS", "SNAP", "WIX", "UPWK", "FVRR", "ASAN", "MNDY", "DOMO", "DT", "VRM", "CVNA"],
+    "BIOTECH & HEALTHCARE": ["MRNA", "BNTX", "NVAX", "REGN", "VRTX", "ALNY", "BIIB", "GILD", "AMGN", "EXEL", "IONS", "CRSP", "EDIT", "NTLA", "BEAM", "FATE", "IOVA", "ARVN", "INCY", "JAZZ", "HALO", "MYGN", "PACB", "TWST", "ILMN", "ABBV", "LLY", "MRK", "PFE", "BMY", "AZN", "NVS", "SNY", "GSK", "TAK", "ABT", "ISRG", "SYK", "MDT", "BDX", "ZBH", "BSX", "EW", "DHR", "TMO", "PODD", "DXCM", "MASI", "RMD", "TFX", "HOLX", "XRAY", "COO", "ALGN", "AXNX", "GMED", "ICUI", "PEN", "NVCR", "TNDM", "TECH", "CTLT", "VEEV", "IQV", "LH", "DGX", "IDXX", "WAT", "A", "CRL", "ZTS", "ELAN", "JNJ", "UNH", "CVS", "CI", "ELV", "HUM", "CNC", "MOH", "HCA", "DVA", "UHS", "THC"],
+    "AGRICULTURE": ["NTR", "MOS", "CF", "FMC", "CTVA"],
+    "ENERGY": ["XOM", "CVX", "COP", "EOG", "PSX", "MPC", "HAL", "SLB", "VLO", "OXY", "DVN", "KMI", "WMB", "OKE", "TRP", "ENB", "ET", "FANG", "MRO", "APA", "BKR", "FTI", "HP", "NBR", "RIG", "WHD", "PBF", "DK", "SU", "IMO", "CNQ", "CVE", "TRMLF", "LNG", "CTRA", "AR", "EQT", "RRC", "BTU", "METC", "CRK", "SM", "MTDR", "VNOM", "CIVI", "TPL", "PTEN", "RES", "OIS", "WTTR", "TEN", "DRVN", "OII"],
+    "CONSUMER": ["PG", "KO", "PEP", "WMT", "COST", "NKE", "HD", "LOW", "SBUX", "MCD", "CMG", "YUM", "QSR", "DRI", "TXRH", "EAT", "CAKE", "PZZA", "DPZ", "WING", "TGT", "DG", "DLTR", "BBY", "TJX", "ROST", "ANF", "AEO", "URBN", "LULU", "ULTA", "EL", "CL", "KMB", "CHD", "CLX", "HSY", "K", "GIS", "CPB", "MDLZ", "TSN", "HRL", "CAG", "MKC", "SJM", "BF-B", "STZ", "TAP", "SAM", "DEO", "BUD", "CCEP", "MNST", "CELH", "KDP", "F", "GM", "RACE", "TM", "HMC", "STLA", "MAR", "HLT", "BKNG", "EXPE", "CCL", "RCL", "NCLH", "WYNN", "LVS", "MGM", "CZR", "PENN", "DKNG", "DIS", "NFLX"],
+    "FINANCIALS": ["JPM", "BAC", "GS", "MS", "WFC", "BLK", "SCHW", "SPGI", "CME", "ICE", "NDAQ", "MCO", "AJG", "AON", "MMC", "BRO", "WTW", "TRV", "PGR", "ALL", "CB", "HIG", "AIG", "MET", "PRU", "AFL", "AMP", "BEN", "TROW", "IVZ", "NTRS", "STT", "BK", "USB", "PNC", "TFC", "FITB", "KEY", "HBAN", "RF", "CFG", "SYF", "COF", "ALLY", "SLM", "NAVI", "CACC", "OMF"],
+    "INDUSTRIALS": ["CAT", "DE", "GE", "LMT", "HON", "UNP", "BA", "NOC", "EMR", "ETN", "RTX", "GD", "TDG", "WM", "RSG", "URI", "ITW", "PH", "CMI", "PCAR", "FAST", "GWW", "MMM", "JCI", "XYL", "DOV", "AME", "SWK", "SNA", "IR", "TT", "IEX", "AOS", "FBIN", "MAS", "BLD", "DAL", "UAL", "AAL", "LUV", "ALK", "FDX", "UPS", "CHRW", "EXPD", "ODFL", "XPO", "JBHT", "KNX", "SNDR"],
+    "MATERIALS": ["LIN", "APD", "NEM", "DOW", "ECL", "SHW", "PPG", "FCX", "SCCO", "GOLD", "FNV", "WPM", "AEM", "IFF", "DD", "LYB", "ALB", "SQM", "CE", "EMN", "OLN", "WLK", "AXTA", "CC", "AVTR", "STLD", "NUE", "CLF"]
+}
+
+def get_universe_and_mapping():
+    # Flatten the dictionary values to create the full universe list
+    universe = [ticker for sector_tickers in SECTOR_MAP.values() for ticker in sector_tickers]
+    universe.append("QQQ") # Add QQQ for regime check
+    
+    # Create a reverse map for easy ticker-to-sector lookup
+    ticker_to_sector = {ticker: sector for sector, tickers in SECTOR_MAP.items() for ticker in tickers}
+    
+    return list(set(universe)), ticker_to_sector
 
 # ==============================================================================
 # 3. SIGNAL ENGINE MODULE
@@ -132,7 +123,6 @@ def find_best_contract(ticker, direction, tda_api_key):
         c.setopt(c.URL, url)
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
-        # --- FINAL FIX: Explicitly set the SSL/TLS version ---
         c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_TLSv1_2)
         c.perform()
         
@@ -164,7 +154,7 @@ def find_best_contract(ticker, direction, tda_api_key):
         df['dte_target_diff'] = abs(df['daysToExpiration'] - 75)
         best_option = df.sort_values(by=['dte_target_diff', 'totalVolume'], ascending=[True, False]).iloc[0]
         print(f"    -> Suitable Option Found for {ticker}.")
-        return {"strike": best_option['strikePrice'], "expiration": best_option['expirationDate'], "dte": int(best_option['daysToExpiration']), "delta": best_option['delta'], "iv": best_option['volatility'], "oi": best_option['openInterest'], "volume": best_option['totalVolume']}
+        return {"strike": best_option['strikePrice'], "expiration": best_option['expirationDate'], "dte": int(best_option['daysToExpiration']), "delta": best_option['delta'], "iv": best_option['volatility'], "oi": best_option['openInterest'], "volume": best_option['volume']}
     except Exception as e:
         print(f"    - An error occurred while fetching options for {ticker}: {e}")
         return None
@@ -182,9 +172,8 @@ def send_pushbullet(api_key, title, body):
 # 5. MAIN ORCHESTRATION FUNCTION
 # ==============================================================================
 def run_screener_main(request):
-    """This function was originally for Google Cloud, we adapt it for script execution."""
     print(f"Scan started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    tickers = get_universe()
+    tickers, ticker_to_sector = get_universe_and_mapping()
     print(f"Loaded {len(tickers)} tickers for scanning.")
     initial_signals = generate_signals(tickers)
 
@@ -194,28 +183,49 @@ def run_screener_main(request):
         return
 
     print(f"\nFound {len(initial_signals)} initial stock signals. Now filtering for suitable options...")
-    notification_body = ""
-    final_signal_count = 0
+    
+    # MODIFIED: Store successful signals in a list first
+    successful_signals = []
     for sig in initial_signals:
         print(f"\n--- Analyzing Options for {sig['ticker']} ({sig['signal']}) ---")
         contract = find_best_contract(sig['ticker'], sig['signal'], TDA_API_KEY)
         if contract:
-            final_signal_count += 1
+            # Add sector information to the signal dictionary
+            sig['sector'] = ticker_to_sector.get(sig['ticker'], 'OTHER')
+            sig['contract'] = contract
+            successful_signals.append(sig)
+
+    if successful_signals:
+        # Sort signals by sector
+        successful_signals.sort(key=lambda x: x['sector'])
+        
+        notification_body = ""
+        current_sector = ""
+        
+        for sig in successful_signals:
+            # Add a sector heading when the sector changes
+            if sig['sector'] != current_sector:
+                notification_body += f"\n--- {sig['sector'].upper()} ---\n"
+                current_sector = sig['sector']
+
+            contract = sig['contract']
             msg = (
-                f"✅ [{sig['signal']}] {sig['ticker']} @ {sig['price']:.2f} (ADX: {sig['adx']:.1f})\n"
+                f"✅ [{sig['signal']}] {sig['ticker']} @ {sig['price']:.2f}\n"
                 f"-> Option: {datetime.fromtimestamp(contract['expiration']/1000).strftime('%d%b%y')} {contract['strike']:.1f}{'C' if sig['signal']=='LONG' else 'P'}\n"
-                f"   (DTE: {contract['dte']}, Δ: {contract['delta']:.2f}, IV: {contract['iv']:.1%}, Vol: {contract['volume']:,}, OI: {contract['oi']:,})\n\n"
+                f"   (DTE: {contract['dte']}, Δ: {contract['delta']:.2f}, IV: {contract['iv']:.1%}, Vol: {contract['volume']:,}, OI: {contract['oi']:,})\n"
             )
             notification_body += msg
-
-    if final_signal_count > 0:
-        notification_title = f"Mike's Algo: {final_signal_count} Final Signal(s)"
-        print(f"\n✅ Scan Complete. {final_signal_count} final signals with suitable options found.")
+        
+        notification_title = f"Mike's Algo: {len(successful_signals)} Final Signal(s)"
+        print(f"\n✅ Scan Complete. {len(successful_signals)} final signals with suitable options found.")
         send_pushbullet(PUSHBULLET_API_KEY, notification_title, notification_body.strip())
     else:
+        # NEW: Create a detailed "no options" message
         print("\nNo signals met the options filtering criteria.")
-        initial_body = f"{len(initial_signals)} initial signals found, but none had suitable options."
-        send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report (No Options)", initial_body)
+        initial_body = f"{len(initial_signals)} initial signals found, but none had suitable options:\n\n"
+        for sig in initial_signals:
+            initial_body += f"- {sig['signal']} {sig['ticker']} @ {sig['price']:.2f}\n"
+        send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report (No Options)", initial_body.strip())
 
 # ==============================================================================
 # 6. SCRIPT EXECUTION BLOCK
