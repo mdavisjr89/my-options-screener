@@ -4,41 +4,44 @@
 name: Run Daily Options Screener
 
 on:
-  # This allows you to run the workflow manually from the Actions tab
   workflow_dispatch:
-
-  # This sets the schedule
   schedule:
-    # Runs at 21:05 UTC (5:05 PM ET / 4:05 PM CT) every day from Monday to Friday.
     - cron: '5 21 * * 1-5'
 
 jobs:
   run-screener:
-    runs-on: ubuntu-latest # Use a standard, clean Linux environment
+    runs-on: ubuntu-latest
 
     steps:
-      # 1. Checks out your repository's code so the script can be run
       - name: Check out repository code
         uses: actions/checkout@v4
 
-      # 2. Sets up the Python environment
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
           python-version: 3.9
 
-      # 3. Install system dependencies for pycurl
-      - name: Install libcurl dependencies
-        run: sudo apt-get update && sudo apt-get install -y libcurl4-openssl-dev libssl-dev
+      # --- NEW DIAGNOSTIC STEP 1 ---
+      # This will print the exact contents of your requirements.txt file to the log.
+      # We can verify that 'alpaca-py' is spelled correctly.
+      - name: Display contents of requirements.txt
+        run: cat requirements.txt
 
-      # 4. Install the Python libraries from your requirements.txt file
+      # --- Install dependencies (No change here) ---
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      # 5. Run the main Python script
+      # --- NEW DIAGNOSTIC STEP 2 ---
+      # This will print a list of every library that was successfully installed.
+      # We will check this list to see if 'alpaca-py' is present.
+      - name: List installed packages
+        run: pip list
+
+      # --- Run the main script (No change here) ---
       - name: Run Options Screener
         env:
-          # This securely passes your secrets to the script
-          TDA_API_KEY: ${{ secrets.TDA_API_KEY }}
+          TDA_API_KEY: ${{ secrets.TDA_API_KEY }} # Note: This is no longer used but doesn't harm anything
           PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
-        run: python main.py
+          ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
+          ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
+        run: python -u main.py
