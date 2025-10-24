@@ -1,6 +1,4 @@
 pandas
-requests
 yfinance
 pushbullet.py
-alpaca-trade-api
-alpha-vantage==2.3.1
+alpaca-py
