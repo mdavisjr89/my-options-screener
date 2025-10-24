@@ -5,8 +5,6 @@ from datetime import datetime, date, timedelta
 import os
 # --- FINAL FIX: Using the modern 'alpaca-py' library and correct imports ---
 from alpaca_py.rest import REST
-from alpaca_py.websocket import OptionDataStream
-from alpaca_py.common.enums import AssetClass
 from alpaca_py.common.requests import OptionChainRequest
 
 # ==============================================================================
@@ -114,6 +112,7 @@ def find_best_contract(ticker, direction, client, last_price):
             type='call' if direction == 'LONG' else 'put',
             limit=5000
         )
+        # Using the new client object to get options data
         chain_data = client.get_option_chain_for_symbol(request_params)
 
         if not chain_data or not chain_data.options:
@@ -167,6 +166,7 @@ def run_screener_main():
     if not ALPACA_KEY or not ALPACA_SECRET:
         print("ERROR: Alpaca API keys are not set.")
         return
+    # Initialize the new REST client
     client = REST(key_id=ALPACA_KEY, secret_key=ALPACA_SECRET, raw_data=True)
     
     tickers, ticker_to_sector = get_universe_and_mapping()
