@@ -3,4 +3,4 @@ requests
 yfinance
 pushbullet.py
 alpaca-trade-api
-alpha-vantage
+alpha-vantage==2.3.1
