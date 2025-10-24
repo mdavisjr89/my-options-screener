@@ -4,7 +4,6 @@ from pushbullet import Pushbullet
 from datetime import datetime, date, timedelta
 import os
 from alpaca_trade_api.rest import REST
-from alpaca_trade_api.stream import Stream
 from alpaca_trade_api.common import URL
 from alpaca_trade_api.data.historical.option import OptionHistoricalDataClient
 from alpaca_trade_api.data.requests import OptionChainRequest
@@ -12,7 +11,6 @@ from alpaca_trade_api.data.requests import OptionChainRequest
 # ==============================================================================
 # 1. API KEY CONFIGURATION
 # ==============================================================================
-# NEW: Alpaca API Keys
 ALPACA_KEY = os.environ.get('ALPACA_KEY')
 ALPACA_SECRET = os.environ.get('ALPACA_SECRET')
 PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY')
