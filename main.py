@@ -3,8 +3,6 @@ import yfinance
 from pushbullet import Pushbullet
 from datetime import datetime, date, timedelta
 import os
-# --- FINAL FIX: The import section is now cleaned up ---
-# Only the necessary components from the current Alpaca library are imported.
 from alpaca_trade_api.data.historical.option import OptionHistoricalDataClient
 from alpaca_trade_api.data.requests import OptionChainRequest
 
@@ -86,4 +84,137 @@ def generate_signals(tickers):
             last_weekly_tema = weekly_data['TEMA_fast'].iloc[-1]
             
             is_crossover_long = prev_daily['TEMA_fast'] < prev_daily['TEMA_slow'] and last_daily['TEMA_fast'] > last_daily['TEMA_slow']
-            is_crossover_short = prev_daily['
+            is_crossover_short = prev_daily['TEMA_fast'] > prev_daily['TEMA_slow'] and last_daily['TEMA_fast'] < last_daily['TEMA_slow']
+
+            if is_bull_regime and is_crossover_long and last_daily['Close'] > last_weekly_tema and last_daily['ADX'] > 18.0:
+                signals.append({'ticker': ticker, 'signal': 'LONG', 'price': last_daily['Close'], 'adx': last_daily['ADX']})
+                print(f"  -> LONG Signal found for {ticker}")
+            if is_bear_regime and is_crossover_short and last_daily['Close'] < last_weekly_tema and last_daily['ADX'] > 18.0:
+                signals.append({'ticker': ticker, 'signal': 'SHORT', 'price': last_daily['Close'], 'adx': last_daily['ADX']})
+                print(f"  -> SHORT Signal found for {ticker}")
+        except Exception:
+            pass
+    return signals
+
+# ==============================================================================
+# 4. UTILITIES (OPTIONS & NOTIFY)
+# ==============================================================================
+def find_best_contract(ticker, direction, client, last_price):
+    try:
+        start_date = (date.today() + timedelta(days=45)).strftime('%Y-%m-%d')
+        end_date = (date.today() + timedelta(days=120)).strftime('%Y-%m-%d')
+        request_params = OptionChainRequest(
+            underlying_symbol=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            type='call' if direction == 'LONG' else 'put',
+            limit=5000
+        )
+        chain_data = client.get_option_chain(request_params)
+
+        if not chain_data or not chain_data.options:
+            print(f"    - No options chain returned for {ticker}.")
+            return None
+
+        contracts = [o.dict() for o in chain_data.options]
+        df = pd.DataFrame(contracts)
+
+        if direction == 'LONG':
+            df = df[df['strike_price'] < last_price]
+        else:
+            df = df[df['strike_price'] > last_price]
+        
+        df['expiration_date'] = pd.to_datetime(df['expiration_date'])
+        df['dte'] = (df['expiration_date'] - datetime.now()).dt.days
+        df['dte_target_diff'] = abs(df['dte'] - 75)
+        
+        if df.empty:
+            print(f"    - No ITM contracts found for {ticker}.")
+            return None
+        
+        best_option = df.sort_values(by=['dte_target_diff']).iloc[0]
+
+        print(f"    -> Suitable Option Found for {ticker}.")
+        return {
+            "strike": best_option['strike_price'],
+            "expiration_date": best_option['expiration_date'].strftime('%Y-%m-%d'),
+            "dte": int(best_option['dte']),
+        }
+
+    except Exception as e:
+        print(f"    - An error occurred while fetching Alpaca options for {ticker}: {e}")
+        return None
+
+def send_pushbullet(api_key, title, body):
+    if api_key and body:
+        try:
+            pb = Pushbullet(api_key)
+            pb.push_note(title, body)
+            print("\n--> Notification sent successfully!")
+        except Exception as e:
+            print(f"\n--> ERROR sending notification: {e}")
+
+# ==============================================================================
+# 5. MAIN ORCHESTRATION FUNCTION
+# ==============================================================================
+def run_screener_main(request):
+    print(f"Scan started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if not ALPACA_KEY or not ALPACA_SECRET:
+        print("ERROR: Alpaca API keys are not set.")
+        return
+    client = OptionHistoricalDataClient(api_key=ALPACA_KEY, secret_key=ALPACA_SECRET)
+    
+    tickers, ticker_to_sector = get_universe_and_mapping()
+    print(f"Loaded {len(tickers)} tickers for scanning.")
+    initial_signals = generate_signals(tickers)
+
+    if not initial_signals:
+        print("\nNo initial stock signals found today.")
+        send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report", "No signals found today.")
+        return
+
+    print(f"\nFound {len(initial_signals)} initial stock signals. Now filtering for suitable options...")
+    
+    successful_signals = []
+    for sig in initial_signals:
+        print(f"\n--- Analyzing Options for {sig['ticker']} ({sig['signal']}) ---")
+        contract = find_best_contract(sig['ticker'], sig['signal'], client, sig['price'])
+        if contract:
+            sig['sector'] = ticker_to_sector.get(sig['ticker'], 'OTHER')
+            sig['contract'] = contract
+            successful_signals.append(sig)
+
+    if successful_signals:
+        successful_signals.sort(key=lambda x: x['sector'])
+        notification_body = ""
+        current_sector = ""
+        for sig in successful_signals:
+            if sig['sector'] != current_sector:
+                notification_body += f"\n--- {sig['sector'].upper()} ---\n"
+                current_sector = sig['sector']
+            contract = sig['contract']
+            exp_date = datetime.strptime(contract['expiration_date'], '%Y-%m-%d')
+            
+            msg = (
+                f"✅ [{sig['signal']}] {sig['ticker']} @ {sig['price']:.2f}\n"
+                f"-> Option: {exp_date.strftime('%d%b%y')} {contract['strike']:.1f}{'C' if sig['signal']=='LONG' else 'P'}\n"
+                f"   (DTE: {contract['dte']})\n"
+            )
+            notification_body += msg
+        
+        notification_title = f"Mike's Algo: {len(successful_signals)} Final Signal(s)"
+        print(f"\n✅ Scan Complete. {len(successful_signals)} final signals with suitable options found.")
+        send_pushbullet(PUSHBULLET_API_KEY, notification_title, notification_body.strip())
+    else:
+        print("\nNo signals met the options filtering criteria.")
+        initial_body = f"{len(initial_signals)} initial signals found, but none had suitable options:\n\n"
+        for sig in initial_signals:
+            initial_body += f"- {sig['signal']} {sig['ticker']} @ {sig['price']:.2f}\n"
+        send_pushbullet(PUSHBULLET_API_KEY, "Mike's Algo Report (No Options)", initial_body.strip())
+
+# ==============================================================================
+# 6. SCRIPT EXECUTION BLOCK
+# ==============================================================================
+if __name__ == '__main__':
+    run_screener_main(None)
