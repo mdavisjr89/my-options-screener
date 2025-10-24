@@ -26,5 +26,5 @@ jobs:
           ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
           ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
           PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
-        # FINAL FIX: Use an explicit path to the Python executable
+        # FINAL FIX: Use the full path to the Python that has the libraries installed
         run: ${{ env.pythonLocation }}/bin/python -u main.py
