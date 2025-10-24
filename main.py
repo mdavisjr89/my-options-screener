@@ -18,7 +18,6 @@ PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY')
 # ==============================================================================
 # 2. SECTOR & UNIVERSE DATA
 # ==============================================================================
-# NEW: A dictionary to map tickers to their sectors for organized reporting.
 SECTOR_MAP = {
     "CORE TECH": ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "AVGO", "TSLA", "AMD", "QCOM", "INTC", "CSCO", "CRM", "ADBE", "ORCL", "TXN", "SAP", "IBM", "UBER", "PYPL", "SQ", "MU", "ADI", "ASML", "LRCX", "AMAT", "KLAC", "SNPS", "CDNS", "PANW", "NOW", "SNOW", "ROP", "KEYS", "MSI", "HPQ", "DELL", "HPE", "NTAP", "STX", "WDC", "GLW", "TER", "FFIV", "CIEN", "EXTR", "AKAM", "SWKS", "QRVO", "ON", "MCHP", "NXPI", "MRVL", "INFY", "WIT", "CTSH", "ACN", "GIB", "EPAM", "CDW", "TDY", "TRMB", "PTC", "TYL", "ADSK", "ANSS", "V", "MA", "AXP", "FISV", "FIS", "GPN", "FLT", "SHOP", "ETSY", "CPNG", "CHWY", "DASH", "LYFT", "ZM", "DOCU", "TEAM", "WDAY", "HUBS", "RNG", "SMAR", "BILL", "DOCN", "MDB", "PLTR", "U", "RBLX", "APP", "DDOG", "NET", "OKTA", "ZS", "CRWD", "FTNT", "CHKP", "QLYS", "TENB", "VRNS", "CYBR", "S", "SYM", "GEN"],
     "HIGH-POTENTIAL TECH": ["SMCI", "TTD", "RKLB", "CRDO", "ALAB", "FTAI", "SATS"],
@@ -35,13 +34,9 @@ SECTOR_MAP = {
 }
 
 def get_universe_and_mapping():
-    # Flatten the dictionary values to create the full universe list
     universe = [ticker for sector_tickers in SECTOR_MAP.values() for ticker in sector_tickers]
-    universe.append("QQQ") # Add QQQ for regime check
-    
-    # Create a reverse map for easy ticker-to-sector lookup
+    universe.append("QQQ")
     ticker_to_sector = {ticker: sector for sector, tickers in SECTOR_MAP.items() for ticker in tickers}
-    
     return list(set(universe)), ticker_to_sector
 
 # ==============================================================================
@@ -123,6 +118,7 @@ def find_best_contract(ticker, direction, tda_api_key):
         c.setopt(c.URL, url)
         c.setopt(c.WRITEDATA, buffer)
         c.setopt(c.FOLLOWLOCATION, True)
+        # --- FINAL FIX: Explicitly set the SSL/TLS version ---
         c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_TLSv1_2)
         c.perform()
         
@@ -184,30 +180,23 @@ def run_screener_main(request):
 
     print(f"\nFound {len(initial_signals)} initial stock signals. Now filtering for suitable options...")
     
-    # MODIFIED: Store successful signals in a list first
     successful_signals = []
     for sig in initial_signals:
         print(f"\n--- Analyzing Options for {sig['ticker']} ({sig['signal']}) ---")
         contract = find_best_contract(sig['ticker'], sig['signal'], TDA_API_KEY)
         if contract:
-            # Add sector information to the signal dictionary
             sig['sector'] = ticker_to_sector.get(sig['ticker'], 'OTHER')
             sig['contract'] = contract
             successful_signals.append(sig)
 
     if successful_signals:
-        # Sort signals by sector
         successful_signals.sort(key=lambda x: x['sector'])
-        
         notification_body = ""
         current_sector = ""
-        
         for sig in successful_signals:
-            # Add a sector heading when the sector changes
             if sig['sector'] != current_sector:
                 notification_body += f"\n--- {sig['sector'].upper()} ---\n"
                 current_sector = sig['sector']
-
             contract = sig['contract']
             msg = (
                 f"✅ [{sig['signal']}] {sig['ticker']} @ {sig['price']:.2f}\n"
@@ -220,7 +209,6 @@ def run_screener_main(request):
         print(f"\n✅ Scan Complete. {len(successful_signals)} final signals with suitable options found.")
         send_pushbullet(PUSHBULLET_API_KEY, notification_title, notification_body.strip())
     else:
-        # NEW: Create a detailed "no options" message
         print("\nNo signals met the options filtering criteria.")
         initial_body = f"{len(initial_signals)} initial signals found, but none had suitable options:\n\n"
         for sig in initial_signals:
