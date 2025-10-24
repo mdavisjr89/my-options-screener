@@ -2,4 +2,4 @@ pandas
 requests
 yfinance
 pushbullet.py
-pycurl
+alpaca-trade-api
