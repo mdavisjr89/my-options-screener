@@ -1,18 +1,20 @@
 import pandas as pd
-import requests
 import yfinance
 from pushbullet import Pushbullet
 from datetime import datetime, date, timedelta
-import pycurl
-from io import BytesIO
-import json
-import urllib.parse
 import os
+from alpaca_trade_api.rest import REST
+from alpaca_trade_api.stream import Stream
+from alpaca_trade_api.common import URL
+from alpaca_trade_api.data.historical.option import OptionHistoricalDataClient
+from alpaca_trade_api.data.requests import OptionChainRequest
 
 # ==============================================================================
 # 1. API KEY CONFIGURATION
 # ==============================================================================
-TDA_API_KEY = os.environ.get('TDA_API_KEY')
+# NEW: Alpaca API Keys
+ALPACA_KEY = os.environ.get('ALPACA_KEY')
+ALPACA_SECRET = os.environ.get('ALPACA_SECRET')
 PUSHBULLET_API_KEY = os.environ.get('PUSHBULLET_API_KEY')
 
 # ==============================================================================
@@ -40,7 +42,7 @@ def get_universe_and_mapping():
     return list(set(universe)), ticker_to_sector
 
 # ==============================================================================
-# 3. SIGNAL ENGINE MODULE
+# 3. SIGNAL ENGINE MODULE (Unchanged)
 # ==============================================================================
 def tema(series, period):
     ema1 = series.ewm(span=period, adjust=False).mean()
@@ -49,10 +51,8 @@ def tema(series, period):
     return 3 * ema1 - 3 * ema2 + ema3
 
 def calculate_adx(high, low, close, length):
-    plus_dm = high.diff()
-    minus_dm = low.diff()
-    plus_dm[plus_dm < 0] = 0
-    minus_dm[minus_dm > 0] = 0
+    plus_dm = high.diff(); minus_dm = low.diff()
+    plus_dm[plus_dm < 0] = 0; minus_dm[minus_dm > 0] = 0
     minus_dm = abs(minus_dm)
     tr = pd.concat([high - low, abs(high - close.shift()), abs(low - close.shift())], axis=1).max(axis=1)
     atr = tr.ewm(alpha=1/length, adjust=False).mean()
@@ -62,6 +62,7 @@ def calculate_adx(high, low, close, length):
     return dx.ewm(alpha=1/length, adjust=False).mean()
 
 def generate_signals(tickers):
+    # ... (This entire function is identical to the previous version) ...
     print("Generating signals...")
     signals = []
     qqq_hist = yfinance.Ticker("QQQ").history(period="1y")
@@ -99,60 +100,68 @@ def generate_signals(tickers):
         except Exception:
             pass
     return signals
-
 # ==============================================================================
-# 4. UTILITIES (OPTIONS & NOTIFY)
+# 4. UTILITIES (OPTIONS & NOTIFY) - REBUILT FOR ALPACA
 # ==============================================================================
-def find_best_contract(ticker, direction, tda_api_key):
+def find_best_contract(ticker, direction, client, last_price):
     try:
-        contract_type = 'CALL' if direction == 'LONG' else 'PUT'
-        from_date = date.today() + timedelta(days=45)
-        to_date = date.today() + timedelta(days=120)
-        
-        endpoint = "https://api.tdameritrade.com/v1/marketdata/chains"
-        params = {'apikey': tda_api_key, 'symbol': ticker, 'contractType': contract_type, 'strikeCount': 20, 'includeQuotes': 'FALSE', 'strategy': 'SINGLE', 'fromDate': from_date.strftime('%Y-%m-%d'), 'toDate': to_date.strftime('%Y-%m-%d')}
-        url = endpoint + '?' + urllib.parse.urlencode(params)
+        # 1. Define date ranges for DTE
+        start_date = (date.today() + timedelta(days=45)).strftime('%Y-%m-%d')
+        end_date = (date.today() + timedelta(days=120)).strftime('%Y-%m-%d')
 
-        buffer = BytesIO()
-        c = pycurl.Curl()
-        c.setopt(c.URL, url)
-        c.setopt(c.WRITEDATA, buffer)
-        c.setopt(c.FOLLOWLOCATION, True)
-        # --- FINAL FIX: Explicitly set the SSL/TLS version ---
-        c.setopt(pycurl.SSLVERSION, pycurl.SSLVERSION_TLSv1_2)
-        c.perform()
-        
-        http_code = c.getinfo(pycurl.HTTP_CODE)
-        c.close()
-        
-        if http_code != 200:
-            print(f"    - API call failed for {ticker} with HTTP status code: {http_code}")
-            return None
-        
-        chain = json.loads(buffer.getvalue().decode('iso-8859-1'))
-        if chain.get('status') != 'SUCCESS' or not chain.get('callExpDateMap'):
+        # 2. Get the full options chain from Alpaca
+        request_params = OptionChainRequest(
+            underlying_symbol=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            type='call' if direction == 'LONG' else 'put',
+            limit=5000 # Fetch a large number of contracts
+        )
+        chain_data = client.get_option_chain(request_params)
+
+        if not chain_data or not chain_data.options:
             print(f"    - No options chain returned for {ticker}.")
             return None
 
-        all_contracts = []
-        date_map = chain.get('callExpDateMap') if direction == 'LONG' else chain.get('putExpDateMap')
-        for exp_date_str, strikes in date_map.items():
-            for strike, contract_data in strikes.items():
-                all_contracts.extend(contract_data)
-        if not all_contracts: return None
+        # 3. Convert to a DataFrame for easy filtering
+        contracts = [o.dict() for o in chain_data.options]
+        df = pd.DataFrame(contracts)
 
-        df = pd.DataFrame(all_contracts)
-        df = df[df['inTheMoney'] == True]
-        df = df[(df['openInterest'] >= 100) & (df['totalVolume'] >= 20)]
-        df = df[(df['delta'] >= 0.60) & (df['delta'] <= 0.70)] if direction == 'LONG' else df[(df['delta'] <= -0.60) & (df['delta'] >= -0.70)]
-        if df.empty: return None
+        # 4. Apply our filters
+        # In-the-money filter
+        if direction == 'LONG':
+            df = df[df['strike_price'] < last_price]
+        else: # SHORT
+            df = df[df['strike_price'] > last_price]
 
-        df['dte_target_diff'] = abs(df['daysToExpiration'] - 75)
-        best_option = df.sort_values(by=['dte_target_diff', 'totalVolume'], ascending=[True, False]).iloc[0]
+        # Liquidity filter (Alpaca doesn't provide OI/Volume in chain, so we rely on finding a contract)
+        # This is a key difference and a tradeoff for using the more reliable API.
+        
+        # Calculate DTE
+        df['expiration_date'] = pd.to_datetime(df['expiration_date'])
+        df['dte'] = (df['expiration_date'] - datetime.now()).dt.days
+        
+        # Find the contract closest to 75 DTE
+        df['dte_target_diff'] = abs(df['dte'] - 75)
+        
+        if df.empty:
+            print(f"    - No ITM contracts found for {ticker}.")
+            return None
+        
+        # 5. Find the best option based on DTE
+        best_option = df.sort_values(by=['dte_target_diff']).iloc[0]
+
         print(f"    -> Suitable Option Found for {ticker}.")
-        return {"strike": best_option['strikePrice'], "expiration": best_option['expirationDate'], "dte": int(best_option['daysToExpiration']), "delta": best_option['delta'], "iv": best_option['volatility'], "oi": best_option['openInterest'], "volume": best_option['volume']}
+        # Note: Alpaca chain doesn't include greeks/IV/volume directly. 
+        # This is a simplified result.
+        return {
+            "strike": best_option['strike_price'],
+            "expiration_date": best_option['expiration_date'].strftime('%Y-%m-%d'),
+            "dte": int(best_option['dte']),
+        }
+
     except Exception as e:
-        print(f"    - An error occurred while fetching options for {ticker}: {e}")
+        print(f"    - An error occurred while fetching Alpaca options for {ticker}: {e}")
         return None
 
 def send_pushbullet(api_key, title, body):
@@ -165,10 +174,17 @@ def send_pushbullet(api_key, title, body):
             print(f"\n--> ERROR sending notification: {e}")
 
 # ==============================================================================
-# 5. MAIN ORCHESTRATION FUNCTION
+# 5. MAIN ORCHESTRATION FUNCTION - ADAPTED FOR ALPACA
 # ==============================================================================
 def run_screener_main(request):
     print(f"Scan started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    # Initialize Alpaca client
+    if not ALPACA_KEY or not ALPACA_SECRET:
+        print("ERROR: Alpaca API keys are not set.")
+        return
+    client = OptionHistoricalDataClient(api_key=ALPACA_KEY, secret_key=ALPACA_SECRET)
+    
     tickers, ticker_to_sector = get_universe_and_mapping()
     print(f"Loaded {len(tickers)} tickers for scanning.")
     initial_signals = generate_signals(tickers)
@@ -183,7 +199,7 @@ def run_screener_main(request):
     successful_signals = []
     for sig in initial_signals:
         print(f"\n--- Analyzing Options for {sig['ticker']} ({sig['signal']}) ---")
-        contract = find_best_contract(sig['ticker'], sig['signal'], TDA_API_KEY)
+        contract = find_best_contract(sig['ticker'], sig['signal'], client, sig['price'])
         if contract:
             sig['sector'] = ticker_to_sector.get(sig['ticker'], 'OTHER')
             sig['contract'] = contract
@@ -198,10 +214,13 @@ def run_screener_main(request):
                 notification_body += f"\n--- {sig['sector'].upper()} ---\n"
                 current_sector = sig['sector']
             contract = sig['contract']
+            exp_date = datetime.strptime(contract['expiration_date'], '%Y-%m-%d')
+            
+            # NOTE: Notification is simplified as Alpaca doesn't provide greeks/vol/oi in the chain.
             msg = (
                 f"✅ [{sig['signal']}] {sig['ticker']} @ {sig['price']:.2f}\n"
-                f"-> Option: {datetime.fromtimestamp(contract['expiration']/1000).strftime('%d%b%y')} {contract['strike']:.1f}{'C' if sig['signal']=='LONG' else 'P'}\n"
-                f"   (DTE: {contract['dte']}, Δ: {contract['delta']:.2f}, IV: {contract['iv']:.1%}, Vol: {contract['volume']:,}, OI: {contract['oi']:,})\n"
+                f"-> Option: {exp_date.strftime('%d%b%y')} {contract['strike']:.1f}{'C' if sig['signal']=='LONG' else 'P'}\n"
+                f"   (DTE: {contract['dte']})\n"
             )
             notification_body += msg
         
