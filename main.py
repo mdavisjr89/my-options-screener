@@ -3,8 +3,11 @@ import yfinance
 from pushbullet import Pushbullet
 from datetime import datetime, date, timedelta
 import os
-from alpaca_trade_api.data.historical.option import OptionHistoricalDataClient
-from alpaca_trade_api.data.requests import OptionChainRequest
+# --- FINAL FIX: Using the modern 'alpaca-py' library and correct imports ---
+from alpaca_py.rest import REST
+from alpaca_py.websocket import OptionDataStream
+from alpaca_py.common.enums import AssetClass
+from alpaca_py.common.requests import OptionChainRequest
 
 # ==============================================================================
 # 1. API KEY CONFIGURATION
@@ -101,23 +104,24 @@ def generate_signals(tickers):
 # ==============================================================================
 def find_best_contract(ticker, direction, client, last_price):
     try:
-        start_date = (date.today() + timedelta(days=45)).strftime('%Y-%m-%d')
-        end_date = (date.today() + timedelta(days=120)).strftime('%Y-%m-%d')
+        start_date = date.today() + timedelta(days=45)
+        end_date = date.today() + timedelta(days=120)
+        
         request_params = OptionChainRequest(
             underlying_symbol=ticker,
-            start_date=start_date,
-            end_date=end_date,
+            expiration_date_gte=start_date,
+            expiration_date_lte=end_date,
             type='call' if direction == 'LONG' else 'put',
             limit=5000
         )
-        chain_data = client.get_option_chain(request_params)
+        chain_data = client.get_option_chain_for_symbol(request_params)
 
         if not chain_data or not chain_data.options:
             print(f"    - No options chain returned for {ticker}.")
             return None
 
-        contracts = [o.dict() for o in chain_data.options]
-        df = pd.DataFrame(contracts)
+        contracts = [o for o in chain_data.options]
+        df = pd.DataFrame([c.__dict__ for c in contracts])
 
         if direction == 'LONG':
             df = df[df['strike_price'] < last_price]
@@ -125,7 +129,7 @@ def find_best_contract(ticker, direction, client, last_price):
             df = df[df['strike_price'] > last_price]
         
         df['expiration_date'] = pd.to_datetime(df['expiration_date'])
-        df['dte'] = (df['expiration_date'] - datetime.now()).dt.days
+        df['dte'] = (df['expiration_date'].dt.date - date.today()).dt.days
         df['dte_target_diff'] = abs(df['dte'] - 75)
         
         if df.empty:
@@ -157,13 +161,13 @@ def send_pushbullet(api_key, title, body):
 # ==============================================================================
 # 5. MAIN ORCHESTRATION FUNCTION
 # ==============================================================================
-def run_screener_main(request):
+def run_screener_main():
     print(f"Scan started at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     
     if not ALPACA_KEY or not ALPACA_SECRET:
         print("ERROR: Alpaca API keys are not set.")
         return
-    client = OptionHistoricalDataClient(api_key=ALPACA_KEY, secret_key=ALPACA_SECRET)
+    client = REST(key_id=ALPACA_KEY, secret_key=ALPACA_SECRET, raw_data=True)
     
     tickers, ticker_to_sector = get_universe_and_mapping()
     print(f"Loaded {len(tickers)} tickers for scanning.")
@@ -217,4 +221,4 @@ def run_screener_main(request):
 # 6. SCRIPT EXECUTION BLOCK
 # ==============================================================================
 if __name__ == '__main__':
-    run_screener_main(None)
+    run_screener_main()
