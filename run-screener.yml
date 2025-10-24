@@ -1,6 +1,3 @@
-# This is the GitHub Actions workflow file.
-# It defines when and how to run your Python screener.
-
 name: Run Daily Options Screener
 
 on:
@@ -21,27 +18,25 @@ jobs:
         with:
           python-version: 3.9
 
-      # --- NEW DIAGNOSTIC STEP 1 ---
-      # This will print the exact contents of your requirements.txt file to the log.
-      # We can verify that 'alpaca-py' is spelled correctly.
-      - name: Display contents of requirements.txt
-        run: cat requirements.txt
+      # This step remains the same
+      - name: Install base dependencies
+        run: pip install pandas yfinance pushbullet.py
 
-      # --- Install dependencies (No change here) ---
-      - name: Install Python dependencies
-        run: pip install -r requirements.txt
+      # --- NEW ROBUST INSTALLATION STEP ---
+      # We now install alpaca-py in a separate, dedicated step.
+      # This provides clearer logs and is more reliable.
+      - name: Install Alpaca Library
+        run: pip install alpaca-py
 
-      # --- NEW DIAGNOSTIC STEP 2 ---
-      # This will print a list of every library that was successfully installed.
-      # We will check this list to see if 'alpaca-py' is present.
-      - name: List installed packages
-        run: pip list
-
-      # --- Run the main script (No change here) ---
+      # This is the final verification before running the script
       - name: Run Options Screener
         env:
-          TDA_API_KEY: ${{ secrets.TDA_API_KEY }} # Note: This is no longer used but doesn't harm anything
-          PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
           ALPACA_KEY: ${{ secrets.ALPACA_KEY }}
           ALPACA_SECRET: ${{ secrets.ALPACA_SECRET }}
-        run: python -u main.py
+          PUSHBULLET_API_KEY: ${{ secrets.PUSHBULLET_API_KEY }}
+        run: |
+          echo "--- Verifying installed packages before run ---"
+          pip list
+          echo "---------------------------------------------"
+          echo "--- Starting main script ---"
+          python -u main.py
